@@ -9,34 +9,35 @@ import random
 from datacenter.models import Schoolkid, Lesson, Commendation, Mark, Chastisement
 
 
-def fix_marks(name):
+PRAISE_WORDS = [
+    'Молодец!', 'Отлично!', 'Гораздо лучше, чем я ожидал!',
+    'Очень хороший ответ!', 'С каждым разом у тебя получается всё лучше!',
+]
+
+
+def get_student(name):
     try:
-        student = Schoolkid.objects.filter(full_name__contains=name).get()
-        Mark.objects.filter(schoolkid__full_name=student.full_name, points__lt=4).update(points=5)
+        return Schoolkid.objects.get(full_name__contains=name)
     except Schoolkid.MultipleObjectsReturned:
         print(f"Найдено несколько совпадений с именем '{name}'")
     except Schoolkid.DoesNotExist:
         print(f"С именем '{name}' ничего не найдено")
+
+
+def fix_marks(name):
+    student = get_student(name)
+    Mark.objects.filter(schoolkid__full_name=student.full_name, points__lt=4).update(points=5)
 
 
 def remove_chastisements(name):
-    try:
-        student = Schoolkid.objects.filter(full_name__contains=name).get()
-        chastisements = Chastisement.objects.filter(schoolkid__full_name=student.full_name)
-        chastisements.delete()
-    except Schoolkid.MultipleObjectsReturned:
-        print(f"Найдено несколько совпадений с именем '{name}'")
-    except Schoolkid.DoesNotExist:
-        print(f"С именем '{name}' ничего не найдено")
+    student = get_student(name)
+    chastisements = Chastisement.objects.filter(schoolkid__full_name=student.full_name)
+    chastisements.delete()
 
 
 def create_commendation(name, subject):
-    praise_words = [
-        'Молодец!', 'Отлично!', 'Гораздо лучше, чем я ожидал!',
-        'Очень хороший ответ!', 'С каждым разом у тебя получается всё лучше!',
-    ]
     try:
-        student = Schoolkid.objects.filter(full_name__contains=name).get()
+        student = get_student(name)
         lesson = Lesson.objects.filter(
             group_letter__contains=student.group_letter,
             year_of_study=student.year_of_study,
@@ -44,19 +45,15 @@ def create_commendation(name, subject):
         ).order_by('-date').first()
 
         Commendation.objects.create(
-            text=random.choice(praise_words),
+            text=random.choice(PRAISE_WORDS),
             created=lesson.date,
             subject=lesson.subject,
             schoolkid=student,
             teacher=lesson.teacher
         )
 
-    except Schoolkid.MultipleObjectsReturned:
-        print(f"Найдено несколько совпадений с именем '{name}'")
-    except Schoolkid.DoesNotExist:
-        print(f"С именем '{name}' ничего не найдено")
     except AttributeError:
-        print(f"В названии предмета '{subject}' допущена ошибка")
+        print(f"В базе данных не нашлось урока '{subject}'")
 
 
 def main():
