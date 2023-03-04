@@ -1,5 +1,6 @@
 import os
 import django
+from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings')
 django.setup()
@@ -7,7 +8,6 @@ django.setup()
 from argparse import ArgumentParser
 import random
 from datacenter.models import Schoolkid, Lesson, Commendation, Mark, Chastisement
-
 
 PRAISE_WORDS = [
     'Молодец!', 'Отлично!', 'Гораздо лучше, чем я ожидал!',
@@ -18,10 +18,10 @@ PRAISE_WORDS = [
 def get_student(name):
     try:
         return Schoolkid.objects.get(full_name__contains=name)
-    except Schoolkid.MultipleObjectsReturned:
-        print(f"Найдено несколько совпадений с именем '{name}'")
-    except Schoolkid.DoesNotExist:
-        print(f"С именем '{name}' ничего не найдено")
+    except MultipleObjectsReturned:
+        raise MultipleObjectsReturned('Найдено несколько учеников, уточните ФИО')
+    except ObjectDoesNotExist:
+        raise ObjectDoesNotExist(f"С именем '{name}' ничего не найдено")
 
 
 def fix_marks(name):
@@ -36,29 +36,29 @@ def remove_chastisements(name):
 
 
 def create_commendation(name, subject):
-    try:
-        student = get_student(name)
-        lesson = Lesson.objects.filter(
-            group_letter__contains=student.group_letter,
-            year_of_study=student.year_of_study,
-            subject__title=subject,
-        ).order_by('-date').first()
+    student = get_student(name)
+    lesson = Lesson.objects.filter(
+        group_letter__contains=student.group_letter,
+        year_of_study=student.year_of_study,
+        subject__title=subject,
+    ).order_by('-date').first()
 
-        Commendation.objects.create(
-            text=random.choice(PRAISE_WORDS),
-            created=lesson.date,
-            subject=lesson.subject,
-            schoolkid=student,
-            teacher=lesson.teacher
-        )
-
-    except AttributeError:
+    if not lesson:
         print(f"В базе данных не нашлось урока '{subject}'")
+        return
+
+    Commendation.objects.create(
+        text=random.choice(PRAISE_WORDS),
+        created=lesson.date,
+        subject=lesson.subject,
+        schoolkid=student,
+        teacher=lesson.teacher
+    )
 
 
 def main():
     arg_parse = ArgumentParser(description='Выбор нужной функции и добавление аргументов к ней')
-    arg_parse.add_argument('-U', '--fix_marks', default='',  help='Функция исправления оценок')
+    arg_parse.add_argument('-U', '--fix_marks', default='', help='Функция исправления оценок')
     arg_parse.add_argument('-D', '--remove_chastisements', default='', help='Функция удаления плохих замечаний')
     arg_parse.add_argument('-A', '--create_commendation', default='', help='Функция добавления похвальных замечаний')
     args = arg_parse.parse_args()
